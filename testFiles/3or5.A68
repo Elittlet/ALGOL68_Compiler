@@ -1,0 +1,6 @@
+main:(
+		FOR x := 0 TO 100 DO
+			IF x % 3 < 1 THEN y := 0; FI ELSE print((x)) FI 
+			IF x % 5 < 1 THEN g := 0; FI ELSE print((x)) FI
+
+			OD)

@@ -1,0 +1,1 @@
+main:( printstring(read(hello, world)) return 0; )

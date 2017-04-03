@@ -1,0 +1,5 @@
+main:( 
+		x := 0;
+		WHILE x < 100 DO:
+			print((x))
+			x := x + 1; OD)

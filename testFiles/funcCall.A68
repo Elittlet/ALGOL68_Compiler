@@ -1,0 +1,3 @@
+PROC printX = (x, y) ( print((x)) )
+
+main:( dummy := printX(x, y); )
