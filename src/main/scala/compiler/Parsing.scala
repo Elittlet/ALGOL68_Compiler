@@ -1,5 +1,7 @@
-object Compiler {
-	object MyParsersNoWhitespace {
+package compiler
+
+object Parsing {
+  object MyParsersNoWhitespace {
     import fastparse.all._
 
     val digits : Parser[Int] = P (CharIn ('0' to '9').rep (1).!).map (s => s.toInt)
@@ -15,34 +17,33 @@ object Compiler {
     val White = fastparse.WhitespaceApi.Wrapper {
       import fastparse.all._
       NoTrace (CharIn (" \n\r\t").rep) // Identifies newline characters and tab characters as whitespace
-    } 
+    }
 
 
 
-/* PARSER: IDENTIFYING WHAT TO PARSE AND HOW TO PARSE DIFFERENT STATEMENTS, EXPRESSIONS, AND FUNCTION DECLARATIONS 
-            ALGOL HAS WIERD ASSIGNMENT STATEMENTS AND FUNCTION DECLARATIONS SO I JUST TAILORED IT TO SATISFACTION    */
-    
+    /* PARSER: IDENTIFYING WHAT TO PARSE AND HOW TO PARSE DIFFERENT STATEMENTS, EXPRESSIONS, AND FUNCTION DECLARATIONS
+                ALGOL HAS WIERD ASSIGNMENT STATEMENTS AND FUNCTION DECLARATIONS SO I JUST TAILORED IT TO SATISFACTION    */
 
-    import fastparse.noApi._
-    import White._
 
     import MyParsersNoWhitespace._
+    import White._
+    import fastparse.noApi._
 
 
     /*Parsing Expressions */
 
     /// Maps to either a regular variable expression or to a function call
     val atExpr : Parser[Expr] = P (
-      integer |  (ident ~ ("(" ~ expr.rep (sep = ",").map (s => s.toList) ~ ")").?).map { 
-        case (nm, None) => Var (nm) 
-        case (nm, Some (es)) => Call (nm, es) 
-      } 
-      | ("newarray" ~ "(" ~/ expr ~ ")").map (e => NewArray (e)) |
-      ("read" ~ "(" ~/ expr ~ "," ~ expr  ~ ")").map { case (arr, idx) => ReadElt (arr, idx) } |
-      ("write" ~ "(" ~/ expr ~ "," ~ expr ~ "," ~ expr  ~ ")").map { case (arr, idx, e) => WriteElt (arr, idx, e) } |
-       ( "(" ~/ expr ~ ")") 
-       )
-       
+      integer |  (ident ~ ("(" ~ expr.rep (sep = ",").map (s => s.toList) ~ ")").?).map {
+        case (nm, None) => Var (nm)
+        case (nm, Some (es)) => Call (nm, es)
+      }
+        | ("newarray" ~ "(" ~/ expr ~ ")").map (e => NewArray (e)) |
+        ("read" ~ "(" ~/ expr ~ "," ~ expr  ~ ")").map { case (arr, idx) => ReadElt (arr, idx) } |
+        ("write" ~ "(" ~/ expr ~ "," ~ expr ~ "," ~ expr  ~ ")").map { case (arr, idx, e) => WriteElt (arr, idx, e) } |
+        ( "(" ~/ expr ~ ")")
+    )
+
 
 
     val multDiv         : Parser[Expr] = P ((atExpr ~ (("*" | "/").! ~ atExpr).rep.map (s => s.toList)).map (foldAssocLeft))
@@ -63,19 +64,19 @@ object Compiler {
     val returnState      : Parser[Stmt] = P(("return" ~ expr ~ ";").map { case (e) => Return (e) })
     // To close out each part of an IF THEN ELSE statement you have to put FI at the end of each body.. Why not just enclose the body in more parenthesis? lol
     val ifState          : Parser[Stmt] = P(("IF" ~ expr ~ "THEN" ~ statement ~ "FI" ~ "ELSE" ~ statement ~ "FI").map { case (e, s1, s2) => If (e, s1, s2) })
-    
+
     // Instead of Curly braces, ALGOL68 identifies the start and body of a function or main function with parenthesis, overkill if you ask me
     val funcdef        : Parser[FuncDef] = P(("PROC" ~ ident ~ "=" ~ "(" ~ ident.rep (sep=",").map (s => s.toList) ~ ")" ~ "(" ~ statement ~ ")").map { case (nm, params, body) => FuncDef (nm, params, body) })
-    val program        : Parser[Program] = P((funcdef.rep.map (s => s.toList) ~ "main:(" ~ statement ~ ")").map { case (funcdefs, body) => Program (funcdefs, body) }) 
+    val program        : Parser[Program] = P((funcdef.rep.map (s => s.toList) ~ "main:(" ~ statement ~ ")").map { case (funcdefs, body) => Program (funcdefs, body) })
     val start          : Parser[Program] = P (program ~ End)
-}
+  }
 
 
 
-/*                             BUILDING THE ABSTRACT SYNTAX TREE
-                                    Basic Expressions
-                       Statements (FOR, ASSIGN, WHILE, PRINT, IF, BLOCKS)
-                                                                            */
+  /*                             BUILDING THE ABSTRACT SYNTAX TREE
+                                      Basic Expressions
+                         Statements (FOR, ASSIGN, WHILE, PRINT, IF, BLOCKS)
+                                                                              */
 
   sealed trait Expr
   case class CstI (n : Int)                                            extends Expr
@@ -95,7 +96,7 @@ object Compiler {
   case class PrintString (arr : Expr)                                  extends Stmt
   case class Block   (ss : List[Stmt])                                 extends Stmt
   case class Return (e : Expr)                                         extends Stmt
-  
+
   case class FuncDef (nm : String, params : List[String], body : Stmt)
 
   case class Program (funs : List[FuncDef], main : Stmt)
@@ -106,5 +107,5 @@ object Compiler {
       case (e1, (op, e2) :: rest) => foldAssocLeft (Prim (op, e1, e2), rest)
     }
   }
-	}
+
 }

@@ -1,4 +1,9 @@
-object Compiler {
+package compiler
+
+import Parsing._
+import Printer._
+
+object Generator {
 	type Env = Map[String,String]
   type FuncEnv = Map[String,FuncDef]
 
@@ -15,16 +20,16 @@ object Compiler {
   // The following registers may be changed by the generated assembly language: %rax, %rbx, %rsp, %rip
   def compileExpr (e : Expr, env : Env, fenv : FuncEnv) : String = {
     e match {
-      case CstI (i)           => 
+      case CstI (i)           =>
         "\tpushq\t$%d\n".format (i)
-      case Var (x)            => 
+      case Var (x)            =>
         env.get (x) match {
           case None => throw new RuntimeException ("unable to find variable %s in environment".format (x))
-          case Some (lab) => 
+          case Some (lab) =>
             "\tpushq\t%s\n".format (lab)
         }
       case Prim (op, e1, e2) => {
-        val insts1 = compileExpr (e1, env, fenv) 
+        val insts1 = compileExpr (e1, env, fenv)
         val insts2 = compileExpr (e2, env, fenv)
         val push = "\tpushq\t%rax\n"
         def pop (reg : String) = "\tpopq\t%%%s\n".format (reg)
@@ -43,28 +48,28 @@ object Compiler {
             "\tidivq\t%rbx\n" +
             "\tmovq\t%rdx, %rax\n"
           }
-          
-          // case "<>" => b2i (i1 != i2) 
+
+          // case "<>" => b2i (i1 != i2)
           case  "<" => {
             "\tcmpq\t%rbx, %rax\n" +    // sets SF if ((rax-rbx) < 0) as signed, i.e., (rax < rbx)
             "\tsets\t%al\n" +           // sets low-order byte (%al) of %rax to 1 if SF is set, otherwise to 0
             "\tmovzbl\t%al, %eax\n"     // extends %al to %rax (recall that assignment to a 32-bit register clears the upper 32-bits of the corresponding 64-bit register)
           }
-           //case  ">" => b2i (i1 > i2) 
-          // case "<=" => b2i (i1 <= i2) 
-          // case ">=" => b2i (i1 >= i2) 
+           //case  ">" => b2i (i1 > i2)
+          // case "<=" => b2i (i1 <= i2)
+          // case ">=" => b2i (i1 >= i2)
           case   _ => throw new RuntimeException ("unknown primitive " + op)
         }
         insts1 +
         insts2 +
         pop ("rbx") +
         pop ("rax") +
-        instsOp + 
+        instsOp +
         push
       }
       case Call (nm, es) => {
         es.reverse.map (e => compileExpr (e, env, fenv)).mkString +
-        "\tcall\t%s\n".format (nm) + 
+        "\tcall\t%s\n".format (nm) +
         "\taddq\t$%d, %%rsp\n".format (es.length * 8) +
         "\tpushq\t%rax\n"
       }
@@ -97,10 +102,10 @@ object Compiler {
   }
 
   def compileAll (prog : Program, env : Env, fenv : FuncEnv) : String = {
-    header () + 
-    compileFunc (FuncDef ("main", Nil, prog.main), env, fenv) + 
+    header () +
+    compileFunc (FuncDef ("main", Nil, prog.main), env, fenv) +
     "\n" +
-    prog.funs.map (fd => compileFunc (fd, env, fenv)).mkString ("\n") + 
+    prog.funs.map (fd => compileFunc (fd, env, fenv)).mkString ("\n") +
     footer (env)
   }
 
@@ -134,13 +139,13 @@ object Compiler {
     "\tleave\n" +
     "\tret\n"
   }
-  
+
   def footer (env : Env) : String = {
     "\n" +
     print_string () +
     "\n" +
-    "\t.section .rodata\n" + 
-    ".output:\n" + 
+    "\t.section .rodata\n" +
+    ".output:\n" +
     "\t.string \"%d\\n\"\n" +
     "\n" +
     (for ((nm1, _) <- env) yield {
@@ -159,20 +164,20 @@ object Compiler {
       "\t.text\n" +
       "\t.globl\t%s\n".format (func.nm) +
       "\t.type\t%s, @function\n".format (func.nm) +
-      "%s:\n".format (func.nm) + 
-      "\tpushq\t%rbp\n" + 
-      "\tmovq\t%rsp, %rbp\n" 
+      "%s:\n".format (func.nm) +
+      "\tpushq\t%rbp\n" +
+      "\tmovq\t%rsp, %rbp\n"
     }
     val footer = {
-      "\tpopq\t%rbp\n" + 
+      "\tpopq\t%rbp\n" +
       "\tret\n"
     }
     var env2 : Env = env
     for ((param, i) <- func.params.zipWithIndex) {
-      env2 = env2 + ( (param, "%d(%%rbp)".format ((i + 2) * 8)) ) 
+      env2 = env2 + ( (param, "%d(%%rbp)".format ((i + 2) * 8)) )
     }
-    header + 
-    compileStmt (func.body, env2, fenv) + 
+    header +
+    compileStmt (func.body, env2, fenv) +
     footer
   }
 
@@ -181,21 +186,21 @@ object Compiler {
       case Assign (nm, e)            => {
         env.get (nm) match {
           case None => throw new RuntimeException ("unable to find variable %s in environment".format (nm))
-          case Some (lab) => 
-            ppStmt ("// ", s) + 
-            compileExpr (e, env, fenv) + 
+          case Some (lab) =>
+            ppStmt ("// ", s) +
+            compileExpr (e, env, fenv) +
             "\tpopq\t%rax\n" +
             "\tmovq\t%%rax, %s\n".format (lab)
         }
       }
-      case If (e, s1, s2)          => 
+      case If (e, s1, s2)          =>
         val label1 = newLabel ()
         val label2 = newLabel ()
         val label3 = newLabel ()
-        "// %s\n".format (ppExpr (e)) + 
+        "// %s\n".format (ppExpr (e)) +
         compileExpr (e, env, fenv) +
-        "\tpopq\t%rax\n" + 
-        "\ttestq\t%rax, %rax\n" + 
+        "\tpopq\t%rax\n" +
+        "\ttestq\t%rax, %rax\n" +
         "\tjne\t%s\n".format (label1) +
         "\tjmp\t%s\n".format (label2) +
         "%s:\n".format (label1) +
@@ -203,7 +208,7 @@ object Compiler {
         "\tjmp\t%s\n".format (label3) +
         "%s:\n".format (label2) +
         compileStmt (s2, env, fenv) +
-        "%s:\n".format (label3) 
+        "%s:\n".format (label3)
       case Block (ss)              => {
         def loop (ss2 : List[Stmt]) : String = {
           ss2 match {
@@ -217,8 +222,8 @@ object Compiler {
         val label1 = newLabel ()
         val label2 = newLabel ()
         "// for (%s := %s to %s)\n".format (nm, ppExpr (low), ppExpr (high)) +
-        compileExpr (low, env, fenv) + 
-        "\tpopq\t%rax\n" + 
+        compileExpr (low, env, fenv) +
+        "\tpopq\t%rax\n" +
         "\tmovq\t%%rax, (%s)\n".format (nm) +
         "\tjmp\t%s\n".format (label2) +
         "%s:\n".format (label1) +
@@ -227,10 +232,10 @@ object Compiler {
         "\taddq\t$1, %rax\n" +
         "\tmovq\t%%rax, (%s)\n".format (nm) +
         "%s:\n".format (label2) +
-        compileExpr (high, env, fenv) + 
-        "\tpopq\t%rbx\n" + 
+        compileExpr (high, env, fenv) +
+        "\tpopq\t%rbx\n" +
         "\tmovq\t(%s), %%rax\n".format (nm) +
-        "\tcmpq\t%rbx, %rax\n" + 
+        "\tcmpq\t%rbx, %rax\n" +
         "\tjle\t%s\n".format (label1)
       }
       case While (e, s)            => {
@@ -241,30 +246,30 @@ object Compiler {
         "%s:\n".format (label1) +
         compileStmt (s, env, fenv) +
         "%s:\n".format (label2) +
-        compileExpr (e, env, fenv) + 
-        "\tpopq\t%rax\n" + 
-        "\ttestq\t%rax, %rax\n" + 
+        compileExpr (e, env, fenv) +
+        "\tpopq\t%rax\n" +
+        "\ttestq\t%rax, %rax\n" +
         "\tjne\t%s\n".format (label1)
       }
       case Print (e)               => {
-        ppStmt ("// ", s) + 
+        ppStmt ("// ", s) +
         compileExpr (e, env, fenv) +
         "\tpopq\t%rsi\n" +
-        "\tmovl\t$.output, %edi\n" + 
+        "\tmovl\t$.output, %edi\n" +
         "\tmovl\t$0, %eax\n" +
         "\tcall\tprintf\n"
       }
       case PrintString (e)  => {
-        ppStmt ("// ", s) + 
+        ppStmt ("// ", s) +
         compileExpr (e, env, fenv) +
         "\tpopq\t%rdi\n" +
         "\tcall\tprint_string\n"
       }
        case Return (e)               => {
-        ppStmt ("// ", s) + 
+        ppStmt ("// ", s) +
         compileExpr (e, env, fenv) +
         "\tpopq\t%rax\n" +
-        "\tpopq\t%rbp\n" + 
+        "\tpopq\t%rbp\n" +
         "\tret\n"
       }
     }
@@ -277,8 +282,8 @@ object Compiler {
       case Prim (op, e1, e2)      => findVarsExpr (e1) ::: findVarsExpr (e2)
       case Call (nm, es)          => es.flatMap (findVarsExpr)
       case NewArray (sz)          => findVarsExpr (sz)
-      case ReadElt (arr, idx)     => findVarsExpr (arr) ::: findVarsExpr (idx) 
-      case WriteElt (arr, idx, e) => findVarsExpr (arr) ::: findVarsExpr (idx) ::: findVarsExpr (e) 
+      case ReadElt (arr, idx)     => findVarsExpr (arr) ::: findVarsExpr (idx)
+      case WriteElt (arr, idx, e) => findVarsExpr (arr) ::: findVarsExpr (idx) ::: findVarsExpr (e)
     }
   }
 
@@ -310,7 +315,7 @@ object Compiler {
       case Return (e)              => {
         findVarsExpr (e)
       }
-      
+
     }
   }
 

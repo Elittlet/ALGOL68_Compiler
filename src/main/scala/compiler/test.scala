@@ -1,5 +1,10 @@
-object Compiler {
-	import fastparse.all.{Parsed,Parser}
+package compiler
+
+import Parsing._
+import Generator._
+
+object test {
+	import fastparse.all.{Parsed, Parser}
 
   def readFile (filename : String) : String = {
     val source : scala.io.BufferedSource = io.Source.fromFile (filename)
@@ -7,7 +12,7 @@ object Compiler {
   }
 
   def invokeAssemblerLinker (asmFilename : String) : Unit = {
-    import scala.sys.process.{Process}
+    import scala.sys.process.Process
     val pb = Process (List ("gcc", "-o", asmFilename.replace (".s", ""), asmFilename))
     import scala.language.postfixOps
     val result : String = (pb !!)
@@ -27,16 +32,16 @@ object Compiler {
     fw.close
     println ("Wrote to %s".format (asmFilename))
     invokeAssemblerLinker (asmFilename)
-  
+
   }
 
-  def test (p : Parser[Program], filename : String) : Unit = {
+  def run (p : Parser[Program], filename : String) : Unit = {
     val input : String = readFile (filename)
-    val result : fastparse.core.Parsed[Program, Char, String] = p.parse (input) 
+    val result : fastparse.core.Parsed[Program, Char, String] = p.parse (input)
     result match {
       case Parsed.Success (prog, successIndex) => {
         println ("Successfully parsed file \"%s\".\nResult is %s.\nIndex is %d.".format (filename, prog, successIndex))
-        
+
         compile (prog, filename)
       }
       case Parsed.Failure (lastParser, index, extra) => {
